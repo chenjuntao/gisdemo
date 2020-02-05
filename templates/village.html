@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <link rel="stylesheet" href="http://15.15.11.129:81/ArcGis4.7/esri/css/main.css">
+    <link rel="stylesheet" href="static/js/ele/index.css">
+    <title>demo</title>
+    <style>
+        #map {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 0;
+            bottom: 0;
+        }
+
+        #app {
+            position: absolute;
+            right: 20px;
+            top: 20px;
+            bottom: 100px;
+            width: 300px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+    <div id="app">
+        <el-tabs type="border-card" @tab-click="handleClick">
+            <el-tab-pane label="长沙县" ref="cs">
+                <el-table show-summary :data="csData" max-height="500" style="width: 100%;margin-bottom: 20px;"
+                    row-key="id" border default-expand-all
+                    :tree-props="{children: 'children', hasChildren: 'hasChildren'}">
+                    <!-- <el-table-column prop="county" label="乡镇" sortable width="120">
+                    </el-table-column> -->
+                    <el-table-column prop="village" label="村" sortable width="120">
+                    </el-table-column>
+                    <el-table-column prop="num" label="人数">
+                    </el-table-column>
+                </el-table>
+            </el-tab-pane>
+            <el-tab-pane label="华容县" ref="hr">
+                <el-table :data="hrData" show-summary max-height="500" style="width: 100%;margin-bottom: 20px;"
+                    row-key="id" border default-expand-all
+                    :tree-props="{children: 'children', hasChildren: 'hasChildren'}">
+                    <!-- <el-table-column prop="county" label="乡镇" sortable width="120">
+                    </el-table-column> -->
+                    <el-table-column prop="village" label="村" sortable width="120">
+                    </el-table-column>
+                    <el-table-column prop="num" label="人数">
+                    </el-table-column>
+                </el-table>
+            </el-tab-pane>
+            <el-tab-pane label="澧县" ref="lx">
+                <el-table :data="lxData" show-summary max-height="500" style="width: 100%;margin-bottom: 20px;"
+                    row-key="id" border default-expand-all
+                    :tree-props="{children: 'children', hasChildren: 'hasChildren'}">
+                    <!-- <el-table-column prop="county" label="乡镇" sortable width="120">
+                    </el-table-column> -->
+                    <el-table-column prop="village" label="村" sortable width="120">
+                    </el-table-column>
+                    <el-table-column prop="num" label="人数">
+                    </el-table-column>
+                </el-table>
+            </el-tab-pane>
+        </el-tabs>
+
+
+
+    </div>
+</body>
+<!-- 引入arcgis js api -->
+<!-- <script src="http://www.dzmap.cn/webapps/other/arcgis/arcgis_js_api/library/4.7/init.js"></script> -->
+<script src="./lib/vue/vue.js"></script>
+<script src="./lib/ele/element.js"></script>
+
+<script src="./js/jquery.min.js"></script>
+<script src="http://15.15.11.129:81/ArcGis4.7/init.js"></script>
+<script>
+    // var dojoConfig = {
+    //     async: true,
+    //     tlmSiblingOfDojo: false,
+    //     packages: [{
+    //         name: "fcl",
+    //         location: location.pathname.replace(/\/[^/]+$/, '') + "/fcl"
+    //     }],
+    //     has: {
+    //         "esri-promise-compatibility": 1 // enable native promises and remove the warning about using when() instead of then(). https://developers.arcgis.com/javascript/latest/guide/release-notes/index.html#improved-compatibility-with-javascript-promises
+    //     }
+    // };
+</script>
+
+<script>
+    //http://www.dzmap.cn/webapps/other/arcgis/arcgis_js_v47_sdk/arcgis_js_api/sdk/api-reference/index.html 这个是我们三院发布的 arcgis js api的官方文档服务, arcgis自身的文档访问太慢
+
+    var vecLyrUrl = "http://15.15.11.141:6080/arcgis/rest/services/vec/MapServer"
+    var lblLyrUrl = "http://15.15.11.141:6080/arcgis/rest/services/label/MapServer"
+    var csGraphicsLayer, hrGraphicsLayer, lxGraphicsLayer
+    var view
+    var dom = document.getElementById("demo")
+    require(["esri/Map", "esri/views/MapView", "esri/Basemap", "esri/tasks/QueryTask", "esri/tasks/support/Query", "esri/geometry/Point", "esri/layers/TileLayer", "esri/Graphic", "esri/layers/GraphicsLayer"], function (Map, MapView, Basemap, QueryTask, Query, Point, TileLayer, Graphic, GraphicsLayer) {
+
+        var vecLayer = new TileLayer({
+            url: vecLyrUrl,
+        })
+        var lblLayer = new TileLayer({
+            url: lblLyrUrl,
+        })
+
+        var basemap = new Basemap({
+            baseLayers: [
+                vecLayer,
+                lblLayer
+            ]
+        });
+
+        var map = new Map({
+            basemap: basemap
+        });
+        view = new MapView({
+            container: "map",  // Reference to the DOM node that will contain the view
+            map: map,              // References the map object created in step 3,
+        });
+
+        csGraphicsLayer = new GraphicsLayer({
+            visible: true
+        })
+        hrGraphicsLayer = new GraphicsLayer({
+            visible: false
+        })
+        lxGraphicsLayer = new GraphicsLayer({
+            visible: false
+        })
+        view.when(function () {
+            map.add(csGraphicsLayer)
+            map.add(hrGraphicsLayer)
+            map.add(lxGraphicsLayer)
+            getMarker()
+
+        }, function (err) {
+            console.log(err);
+        })
+
+        var symbol = {
+            type: "picture-marker",
+            url: "./p1.png",
+            width: "20px",
+            height: "20px"
+        }
+        function getMarker() {
+            $.getJSON("./json/csliebiao.json", function (result) {
+                addMarker(result.RECORDS, csGraphicsLayer)
+            })
+            $.getJSON("./json/lxliebiao.json", function (result) {
+                addMarker(result.RECORDS, lxGraphicsLayer)
+            })
+            $.getJSON("./json/hrliebiao.json", function (result) {
+                addMarker(result.RECORDS, hrGraphicsLayer)
+            })
+            console.log(csGraphicsLayer);
+            console.log(hrGraphicsLayer);
+            console.log(lxGraphicsLayer);
+
+        }
+
+        function addMarker(data, glayer) {
+            data.map(p => {
+                var point = new Point({
+                    x: p.long,
+                    y: p.lat,
+                    spatialReference: 4490  //这里是用的4490坐标系，也就是国家2000坐标系，可以换
+                })
+                var g = new Graphic({
+                    geometry: point,
+                    symbol: symbol,
+                    attributes: p,
+                    popupTemplate: {
+                        title: "电话号码:{telphone}，归属地:{areaaddr}"
+                    }
+                })
+                glayer.add(g)
+            })
+        }
+
+
+    });
+
+
+</script>
+
+<script>
+
+    new Vue({
+        el: '#app',
+        data: function () {
+            return {
+                hrData: [
+                    {
+                        "county": "华容县",
+                        "village": "万庾镇",
+                        "num": "2312"
+                    },
+                    {
+                        "county": "华容县",
+                        "village": "三封寺镇",
+                        "num": "220"
+                    },
+                    {
+                        "county": "华容县",
+                        "village": "东山镇",
+                        "num": "2071"
+                    },
+                    {
+                        "county": "华容县",
+                        "village": "北景港镇",
+                        "num": "192"
+                    },
+                    {
+                        "county": "华容县",
+                        "village": "团洲乡",
+                        "num": "130"
+                    },
+                    {
+                        "county": "华容县",
+                        "village": "插旗镇",
+                        "num": "228"
+                    },
+                    {
+                        "county": "华容县",
+                        "village": "操军镇",
+                        "num": "213"
+                    },
+                    {
+                        "county": "华容县",
+                        "village": "新河乡",
+                        "num": "254"
+                    },
+                    {
+                        "county": "华容县",
+                        "village": "梅田湖镇",
+                        "num": "532"
+                    },
+                    {
+                        "county": "华容县",
+                        "village": "治河渡镇",
+                        "num": "133"
+                    },
+                    {
+                        "county": "华容县",
+                        "village": "注滋口镇",
+                        "num": "403"
+                    },
+                    {
+                        "county": "华容县",
+                        "village": "禹山镇",
+                        "num": "311"
+                    },
+                    {
+                        "county": "华容县",
+                        "village": "章华镇",
+                        "num": "2032"
+                    },
+                    {
+                        "county": "华容县",
+                        "village": "鲇鱼须镇",
+                        "num": "549"
+                    }
+                ],
+                csData: [
+                    {
+                        "county": "长沙县",
+                        "village": "北山镇",
+                        "num": "166"
+                    },
+                    {
+                        "county": "长沙县",
+                        "village": "安沙镇",
+                        "num": "228"
+                    },
+                    {
+                        "county": "长沙县",
+                        "village": "开慧镇",
+                        "num": "150"
+                    },
+                    {
+                        "county": "长沙县",
+                        "village": "星沙街道",
+                        "num": "924"
+                    },
+                    {
+                        "county": "长沙县",
+                        "village": "春华镇",
+                        "num": "130"
+                    },
+                    {
+                        "county": "长沙县",
+                        "village": "果园镇",
+                        "num": "79"
+                    },
+                    {
+                        "county": "长沙县",
+                        "village": "榔梨街道",
+                        "num": "165"
+                    },
+                    {
+                        "county": "长沙县",
+                        "village": "江背镇",
+                        "num": "165"
+                    },
+                    {
+                        "county": "长沙县",
+                        "village": "泉塘街道",
+                        "num": "601"
+                    },
+                    {
+                        "county": "长沙县",
+                        "village": "湘龙街道",
+                        "num": "502"
+                    },
+                    {
+                        "county": "长沙县",
+                        "village": "福临镇",
+                        "num": "74"
+                    },
+                    {
+                        "county": "长沙县",
+                        "village": "路口镇",
+                        "num": "105"
+                    },
+                    {
+                        "county": "长沙县",
+                        "village": "金井镇",
+                        "num": "199"
+                    },
+                    {
+                        "county": "长沙县",
+                        "village": "长龙街道",
+                        "num": "14"
+                    },
+                    {
+                        "county": "长沙县",
+                        "village": "青山铺镇",
+                        "num": "102"
+                    },
+                    {
+                        "county": "长沙县",
+                        "village": "高桥镇",
+                        "num": "67"
+                    },
+                    {
+                        "county": "长沙县",
+                        "village": "黄兴镇",
+                        "num": "380"
+                    },
+                    {
+                        "county": "长沙县",
+                        "village": "黄花镇",
+                        "num": "419"
+                    }
+                ],
+                lxData: [
+                    {
+                        "county": "澧县",
+                        "village": "城头山镇",
+                        "num": "261"
+                    },
+                    {
+                        "county": "澧县",
+                        "village": "复兴镇",
+                        "num": "2292"
+                    },
+                    {
+                        "county": "澧县",
+                        "village": "大堰垱镇",
+                        "num": "331"
+                    },
+                    {
+                        "county": "澧县",
+                        "village": "如东镇",
+                        "num": "841"
+                    },
+                    {
+                        "county": "澧县",
+                        "village": "官垸镇",
+                        "num": "257"
+                    },
+                    {
+                        "county": "澧县",
+                        "village": "小渡口镇",
+                        "num": "516"
+                    },
+                    {
+                        "county": "澧县",
+                        "village": "梦溪镇",
+                        "num": "364"
+                    },
+                    {
+                        "county": "澧县",
+                        "village": "涔南镇",
+                        "num": "193"
+                    },
+                    {
+                        "county": "澧县",
+                        "village": "澧南镇",
+                        "num": "212"
+                    },
+                    {
+                        "county": "澧县",
+                        "village": "澧浦街道",
+                        "num": "546"
+                    },
+                    {
+                        "county": "澧县",
+                        "village": "澧澹街道",
+                        "num": "539"
+                    },
+                    {
+                        "county": "澧县",
+                        "village": "澧西街道",
+                        "num": "485"
+                    },
+                    {
+                        "county": "澧县",
+                        "village": "澧阳街道",
+                        "num": "1008"
+                    },
+                    {
+                        "county": "澧县",
+                        "village": "火连坡镇",
+                        "num": "928"
+                    },
+                    {
+                        "county": "澧县",
+                        "village": "王家厂镇",
+                        "num": "151"
+                    },
+                    {
+                        "county": "澧县",
+                        "village": "甘溪滩镇",
+                        "num": "780"
+                    },
+                    {
+                        "county": "澧县",
+                        "village": "盐井镇",
+                        "num": "2537"
+                    },
+                    {
+                        "county": "澧县",
+                        "village": "码头铺镇",
+                        "num": "227"
+                    },
+                    {
+                        "county": "澧县",
+                        "village": "金罗镇",
+                        "num": "741"
+                    }
+                ]
+            }
+        },
+        methods: {
+            handleClick(tab, event) {
+                var label = tab.label
+                switch (label) {
+                    case '长沙县':
+                        csGraphicsLayer.visible = true
+                        hrGraphicsLayer.visible = false
+                        lxGraphicsLayer.visible = false
+                        view.goTo(csGraphicsLayer.graphics)
+                        break;
+                    case '澧县':
+                        csGraphicsLayer.visible = false
+                        hrGraphicsLayer.visible = false
+                        lxGraphicsLayer.visible = true
+                        view.goTo(lxGraphicsLayer.graphics)
+
+                        break;
+                    case '华容县':
+                        csGraphicsLayer.visible = false
+                        hrGraphicsLayer.visible = true
+                        lxGraphicsLayer.visible = false
+                        view.goTo(hrGraphicsLayer.graphics)
+
+                        break;
+                }
+            }
+        }
+    })
+</script>
+
+</html>

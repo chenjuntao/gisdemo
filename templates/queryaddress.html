@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <link rel="stylesheet" href="http://15.15.11.129:81/ArcGis4.7/esri/css/main.css">
+    <title>arcgisQueryPoint</title>
+    <style>
+        .formCenter {
+            background-color: aquamarine;
+            width: 80%;
+            margin: 0 auto;
+            border: solid 1px #ff0000
+        }
+
+        body {
+            text-align: center;
+            font-size: xx-large;
+            padding: 5%;
+        }
+
+        td {
+            padding: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <table class="formCenter">
+        <tr>
+            <td>
+                <label>
+                    Arcgis根据经纬度查询对应的乡镇/村地名工具
+                </label>
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <button id="btnProcess" onclick="processData()" style="font-size: xx-large;">
+                    开始进行数据处理
+                </button>
+            </td>
+        </tr>
+        <tr>
+            <td>
+                需转换的数据(编码必须为utf-8，格式必须为csv)：(static/datatool/csv/
+                <input id="fId" type='text' style="font-size: xx-large; width: 50%;"></input>
+                .csv)
+            </td>
+        </tr>
+        <tr>
+            <td>
+                当前处理完成进度:
+                <label id="step" style="color: red;">
+                </label>
+                ，数据总量:
+                <label id="allCount">
+                </label>
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <a id='aDL' style="display:none;" href="#" onclick="clickDL(this)">
+                    download
+                </a>
+            </td>
+        </tr>
+    </table>
+</body>
+
+<script src="static/js/vendor/jquery.min.js"></script>
+<script src="static/js/vendor/jquery.csv.min.js"></script>
+<script src="http://15.15.11.129:81/ArcGis4.7/init.js"></script>
+
+<script>
+    var resultCsv = ""
+
+    function processData() {
+        var fileName = 'static/datatool/csv/' + $('#fId').val() + '.csv'
+        $.get(fileName, function (csvstr) {
+            var data = $.csv.toObjects(csvstr);
+
+            // $('#result').html("data read complete!");
+            // var resultStr = createTable(data);
+            var resultStr = findAddrInGis(data);
+            $("#btnProcess").attr("disabled","disabled");
+            $("#fId").attr("disabled","disabled");
+            // $('#result').html(resultStr);
+        });
+    }
+
+    function clickDL(aLink) {
+        // resultCsv = encodeURIComponent($('#result').html());
+
+        var blob = new Blob(["\ufeff" + resultCsv], {type: 'text/csv'}); //解决大文件下载失败
+        aLink.setAttribute("href", URL.createObjectURL(blob));
+        
+        // aLink.href = "data:text/csv;charset=utf-8,\ufeff" + resultCsv;
+        var fi = $('#fId').val()
+        aLink.download = 'f' + fi + '_含乡镇.csv'
+        aLink.style.display = "none";
+        $("#btnProcess").removeAttr("disabled");
+        $("#fId").removeAttr("disabled");
+    }
+
+    function createTable(data) {
+        var html = '';
+        if (data[0].constructor === Object) {
+            html += '<tr>\r\n';
+            for (var item in data[0]) {
+                html += '<th>' + item + '</th>\r\n';
+            }
+            html += '</tr>\r\n';
+            for (var row in data) {
+                html += '<tr>\r\n';
+                for (var item in data[row]) {
+                    html += '<td>' + data[row][item] + '</td>\r\n';
+                }
+                html += '</tr>\r\n';
+            }
+        }
+        return html;
+    }
+
+    function findAddrInGis(dt) {
+        var resultStr = "";
+        var serverUrlXZ = "http://15.15.11.141:6080/arcgis/rest/services/xiangzhen/MapServer/0";
+        var serverUrlCun = "http://15.15.11.141:6080/arcgis/rest/services/cun/MapServer/0";
+        require(["esri/tasks/QueryTask", "esri/tasks/support/Query", "esri/geometry/Point"], function (QueryTask, Query, Point) {
+
+            // for (var r=0; r<dt.length; r++) {
+
+
+            //     var cunName = '';
+            //     // var queryTaskCun = new QueryTask({
+            //     //     url: serverUrlCun
+            //     // });
+            //     // queryTaskCun.execute(query).then(function (results) {
+            //     //     if (results.features.length > 0) {
+            //     //         cunName = results.features[0].attributes['NAME'];
+            //     //     }
+            //     // });
+            // }
+
+            var step = 0
+            resultCsv = ""
+            $('#allCount').text(dt.length);
+
+            myTask(dt, 0);
+            function myTask(dt, r) {
+                var p = new Point({
+                    x: dt[r]['lon'], y: dt[r]['lat']
+                });
+
+                var query = new Query({
+                    where: `CITY = '${dt[r]['city']}'`,
+                    geometry: p,
+                    returnGeometry: false,
+                    outFields: 'NAME'
+                });
+
+                var xzName = '';
+                var queryTaskXZ = new QueryTask({
+                    url: serverUrlXZ
+                });
+
+                var str = dt[r]['id'] + ',' + dt[r]['tel'] + ',';
+                // var str = dt[r]['id'] + ',' + dt[r]['tel'] + ',' + dt[r]['province'] + ',' + dt[r]['city'] + ',' + dt[r]['county'] + ',';
+                queryTaskXZ.execute(query).then(function (results) {
+                    xzName = 'none';
+                    if (results.features.length > 0) {
+                        xzName = results.features[0].attributes['NAME'];
+                    }
+                    var newRow = str + xzName + '\n';
+
+                    // resultStr += newRow;
+                    resultCsv += newRow;
+                    r++;
+                    if (r < dt.length) {
+                        $('#step').text(r+1);
+                        myTask(dt, r);
+                    } else {
+                        // $('#result').text(resultStr);
+                        aDL.style.display = "block";
+                    }
+                });
+            }
+        });
+    }
+</script>
+
+</html>
